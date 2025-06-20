@@ -1,0 +1,1049 @@
+---
+title: "Squash"
+author: "Pranav Shankaran"
+format: html
+editor: visual
+---
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(kableExtra)
+```
+
+```{r Load datasets}
+
+# Load libraries
+library(tidyverse)
+
+# Read the CSV files
+# Read positions.csv with the correct delimiter
+positions <- read_delim("positions.csv", delim = ";")
+
+# Read attributes.csv with the correct delimiter
+attributes <- read_delim("attributes.csv", delim = ";")
+pboxes <- read_delim("pboxes.csv", delim = ";")
+tboxes <- read_delim("tboxes.csv", delim = ";")
+
+```
+
+```{r}
+# Look at the structure and summary
+glimpse(positions)
+summary(positions)
+
+glimpse(attributes)
+summary(attributes)
+
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+# Define professional squash player data
+players <- data.frame(
+  LastName = c("Gilis", "Tomlinson", "Rodriguez", "Farag", "Salem", "Au", "Marche", "Hosny", 
+               "Rehman", "Coll", "James", "Elias", "Sherbini", "Adel", 
+               "Richards", "Elshorbagy", "Rosner", "Gaultier"),
+  FullName = c("Nele Gilis", "Millie Tomlinson", "Miguel Ángel Rodríguez", "Ali Farag", "Zahed Salem", 
+               "Leo Au", "Grégoire Marche", "Ahmed Hosny", "Aqeel Rehman", "Paul Coll", "Declan James", 
+               "Diego Elías", "Nour El Sherbini", "Nouran Gohar", "Tom Richards", 
+               "Mohamed ElShorbagy", "Simon Rösner", "Grégory Gaultier"),
+  Handedness = c("Right", "Right", "Right", "Right", "Right", "Right", "Right", "Right", 
+                 "Right", "Right", "Right", "Right", "Right", "Right", 
+                 "Right", "Right", "Right", "Right"),
+  Country = c("BEL", "ENG", "COL", "EGY", "EGY", "HKG", "FRA", "EGY", "AUT", "NZL", 
+              "ENG", "PER", "EGY", "EGY", "ENG", "EGY", "GER", "FRA"),
+  TitlesWon = c(10, 14, 31, 46, 8, 11, 5, NA, 14, 5, 13, 13, 44, 35, 6, 51, 9, 44)
+)
+
+# Create a nicely formatted summary table
+players %>%
+  kbl(caption = "Professional Squash Player Data (as of June 2025)",
+      align = "lccccc") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), 
+                full_width = FALSE) %>%
+  row_spec(0, background = "#E0E0E0", color = "black") %>%
+  column_spec(1, bold = TRUE)
+
+```
+
+Match Recordings
+
+```{r}
+
+library(knitr)
+library(kableExtra)
+
+match_results <- tribble(
+  ~Match_Up,                              ~Tournament,                               ~Year, ~Winner,               ~Match_Summary,
+  "Aqeel Rehman vs Ahmed Hosny",         "Internazionali d'Italia PSA - Semifinal", 2019,  "Aqeel Rehman",        "3–1",
+  "Nele Gilis vs Fiona Tomlinson",       "Squash De Nantes - Free Game Friday",     2017,  "Nele Gilis",          "3–0",
+  "Ali Farag vs Gregory Gaultier",       "US Open",                                  2018,  "Ali Farag",           "3–2",
+  "Miguel Rodríguez vs Simon Rösner",    "Hong Kong Open - Free Game Friday",       2018,  "Simon Rösner",        "3–2",
+  "Leo Au vs Grégoire Marche",           "Black Ball Squash Open",                  2018,  "Grégoire Marche",     "2–3",
+  "Adel vs Sherbini",                    "US Open Women's Quarter Final",           2018,  "Nour El Sherbini",    "0–3",
+  "ElShorbagy vs Richards",              "World Championships",                     2018,  "Mohamed ElShorbagy",  "3–2",
+  "Coll vs James",                       "British Open / PSA Event",                2018,  "Paul Coll",           "3–2",
+  "Elias vs Farag",                      "Tournament of Champions",                 2019,  "Ali Farag",           "0–3",
+  "Salem vs Rodriguez",                  "PSA Men's World Championship",            2019,  "Zahed Salem",         "3–1"
+)
+
+match_results %>%
+  kbl(caption = "Match Results and Score Summaries",
+      align = "lclcc") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = FALSE) %>%
+  row_spec(0, background = "#E0E0E0", bold = TRUE)
+
+
+
+```
+
+Combining the datasets Positions & Attributes
+
+```{r}
+# Merge datasets by filename
+squash_data <- left_join(positions, attributes, by = "filename")
+
+```
+
+Clean the Data
+
+Remove rows where player position data is missing (i.e., NA in `p1.x`, `p2.x`, etc.)
+
+```{r}
+squash_data_clean <- squash_data %>%
+  filter(!is.na(p1.x) & !is.na(p2.x)) %>% # Keep existing filter for player position data
+  filter(action == TRUE & replay == FALSE) # Add this filter to keep only action frames, excluding replays
+```
+
+Basic EDA
+
+1\. How many Action and replay frames?
+
+```{r}
+squash_data_clean %>%
+  summarize(
+    total_frames = n(),
+    action_frames = sum(action, na.rm = TRUE),
+    replay_frames = sum(replay, na.rm = TRUE)
+  )
+
+```
+
+**2. Which players appear the most?**
+
+```{r}
+table(squash_data_clean$p1.name)
+table(squash_data_clean$p2.name)
+
+```
+
+**3. What is the coordinate range for each player?**
+
+```{r}
+summary(squash_data_clean[, c("p1.x", "p1.y", "p2.x", "p2.y")])
+
+```
+
+### 📈 Step 3: Visualize player positions on the court
+
+```{r}
+library(ggplot2)
+
+ggplot(squash_data_clean) +
+  geom_point(aes(x = p1.x, y = p1.y, color = p1.name), alpha = 0.4) +
+  geom_point(aes(x = p2.x, y = p2.y, color = p2.name), alpha = 0.4) +
+  labs(title = "Player Positions on Squash Court") +
+  xlim(-3.2, 3.2) +
+  ylim(-4.875, 4.875) +
+  theme_minimal()
+
+```
+
+```{r}
+
+library(ggplot2)
+library(dplyr) # Ensure dplyr is loaded for tibble and tribble
+
+# Define standard court dimensions (in meters)
+court_width <- 6.4
+court_length <- 9.75
+
+# Court boundaries (centered at 0,0 for width, and 0 for length for simplicity)
+# Let's adjust length to be from 0 to 9.75 for easier calculation from back wall
+# For plotting, we'll shift it to be centered later if needed, but for line definitions,
+# let's consider the back wall at y=0 and front wall at y=9.75.
+# Or, stick to the centered approach if player coordinates are already centered.
+# Given your player coordinates are from -4.875 to 4.875, let's keep the court centered.
+court_xmin <- -court_width / 2  # -3.2
+court_xmax <- court_width / 2   # 3.2
+court_ymin <- -court_length / 2 # -4.875
+court_ymax <- court_length / 2  # 4.875
+
+# Key Y-coordinates for horizontal lines (relative to court_ymin)
+# Short line is 4.26m from the back wall (court_ymin)
+y_short_line <- court_ymin + 4.26
+# Halfway line is at the center of the court's length
+y_halfway_line <- 0
+# Front service line is 1.6m (63 inches) from the short line, towards the front wall
+y_service_box_front_line <- y_short_line + 1.6
+
+# Key X-coordinates for vertical lines (relative to court_xmin)
+# Center line is at the middle of the court's width
+x_center_line <- 0
+# Service box inner vertical lines are 1.6m (63 inches) from the side walls
+x_service_box_inner_left <- court_xmin + 1.6
+x_service_box_inner_right <- court_xmax - 1.6
+
+# Define all court lines as segments using tribble for clear definition
+court_lines_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  # 1. Outer Walls (Perimeter)
+  court_xmin, court_ymin,  court_xmax, court_ymin, # Back Wall (bottom)
+  court_xmin, court_ymax,  court_xmax, court_ymax, # Front Wall (top)
+  court_xmin, court_ymin,  court_xmin, court_ymax, # Left Sidewall
+  court_xmax, court_ymin,  court_xmax, court_ymax, # Right Sidewall
+
+  # 2. Short Line (across the court)
+  court_xmin, y_short_line,  court_xmax, y_short_line,
+
+  # 3. Halfway Line (across the court)
+  court_xmin, y_halfway_line, court_xmax, y_halfway_line,
+
+  # 4. T-Line (vertical segment, from short line to halfway line)
+  x_center_line, y_short_line, x_center_line, y_halfway_line,
+
+  # 5. Service Boxes
+  # Left Service Box:
+  # Horizontal line: from left wall to inner service box line, at y_service_box_front_line
+  court_xmin, y_service_box_front_line, x_service_box_inner_left, y_service_box_front_line,
+  # Vertical line: from short line to front service box line, at x_service_box_inner_left
+  x_service_box_inner_left, y_short_line, x_service_box_inner_left, y_service_box_front_line,
+
+  # Right Service Box:
+  # Horizontal line: from inner service box line to right wall, at y_service_box_front_line
+  x_service_box_inner_right, y_service_box_front_line, court_xmax, y_service_box_front_line,
+  # Vertical line: from short line to front service box line, at x_service_box_inner_right
+  x_service_box_inner_right, y_short_line, x_service_box_inner_right, y_service_box_front_line
+)
+
+# Now, for the plotting code:
+ggplot() +
+  # Court boundary (using geom_rect with black border to define overall court shape)
+  geom_rect(aes(xmin = court_xmin, xmax = court_xmax, ymin = court_ymin, ymax = court_ymax),
+            fill = "white", color = "black", linewidth = 1) +
+
+  # Add all standard court lines using geom_segment
+  geom_segment(data = court_lines_data,
+               aes(x = x1, y = y1, xend = x2, yend = y2),
+               color = "black", linewidth = 0.7) + # Court lines typically black or white on a dark court
+
+  # Player positions
+  geom_point(data = squash_data_clean, aes(x = p1.x, y = p1.y, color = p1.name), alpha = 0.6) +
+  geom_point(data = squash_data_clean, aes(x = p2.x, y = p2.y, color = p2.name), alpha = 0.6) +
+
+  coord_fixed() + # Ensures correct aspect ratio (important for accurate court shape)
+  labs(title = "Squash Player Positions on a Full-Sized Court",
+       x = "Court Width (meters)", y = "Court Length (meters)") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), # Remove major grid lines
+        panel.grid.minor = element_blank()) + # Remove minor grid lines
+
+  # Add label for the Back Wall
+  annotate("text", x = court_xmin + (court_xmax - court_xmin) / 2, y = court_ymin - 0.2,
+           label = "Back Wall", vjust = 1, hjust = 0.5, size = 3, color = "black")
+```
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+
+# --- Define Court Dimensions and Key Line Coordinates ---
+court_width <- 6.4
+court_length <- 9.75
+
+court_xmin <- -court_width / 2
+court_xmax <- court_width / 2
+court_ymin <- -court_length / 2 # Y-coordinate of the Back Wall
+court_ymax <- court_length / 2 # Y-coordinate of the Front Wall
+
+y_short_line <- court_ymin + 4.26 # Y-coordinate of the Short Line
+x_center_line <- 0 # X-coordinate for the center of the court
+
+# Coordinates for service box lines (extending FROM Short Line TOWARDS Back Wall)
+y_service_box_back_line <- y_short_line - 1.6 # 1.6m towards the back from the Short Line
+
+# Inner X-coordinates for service boxes (1.6m from respective sidewalls)
+x_service_box_inner_left <- court_xmin + 1.6
+x_service_box_inner_right <- court_xmax - 1.6
+
+# --- Lines Data (cumulative from previous steps) ---
+
+# Short Line
+short_line_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  court_xmin, y_short_line,  court_xmax, y_short_line
+)
+
+# Vertical line from Short Line to Back Wall
+vertical_line_short_to_back_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  x_center_line, y_short_line, x_center_line, court_ymin
+)
+
+# Service Box Lines
+service_box_lines_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  # Horizontal lines at the BACK of the service boxes
+  court_xmin, y_service_box_back_line, x_service_box_inner_left, y_service_box_back_line, # Left box back horizontal
+  x_service_box_inner_right, y_service_box_back_line, court_xmax, y_service_box_back_line, # Right box back horizontal
+
+  # Vertical lines at the INNER side of the service boxes
+  x_service_box_inner_left, y_short_line, x_service_box_inner_left, y_service_box_back_line, # Left box inner vertical
+  x_service_box_inner_right, y_short_line, x_service_box_inner_right, y_service_box_back_line # Right box inner vertical
+)
+
+# Combine ALL internal lines drawn so far
+all_internal_lines_current <- bind_rows(
+  short_line_data,
+  vertical_line_short_to_back_data,
+  service_box_lines_data
+)
+
+# --- Labels Data (All labels, positioned outside the court - "Back Wall" removed) ---
+labels_current <- tribble(
+  ~x, ~y, ~label, ~color_val, ~angle_val,
+  # Short Line label
+  x_center_line - 0.6, y_short_line + 0.6, "Short Line", "red", 0,
+
+  # Front Wall label
+  x_center_line, court_ymax + 0.8, "Front Wall", "black", 0,
+
+  # Left Service Box label
+  court_xmin - 0.8, (y_short_line + y_service_box_back_line) / 2, "Left Service Box", "red", 90,
+
+  # Right Service Box label
+  court_xmax + 0.8, (y_short_line + y_service_box_back_line) / 2, "Right Service Box", "red", 90
+) %>% mutate(color_val = as.factor(color_val))
+
+# --- Plotting the court with updated labels ---
+ggplot() +
+  # Draw the main court rectangle (the base "graph")
+  geom_rect(aes(xmin = court_xmin, xmax = court_xmax, ymin = court_ymin, ymax = court_ymax),
+            fill = "white",
+            color = "black",
+            linewidth = 0.8) +
+
+  # Add all internal lines
+  geom_segment(data = all_internal_lines_current,
+               aes(x = x1, y = y1, xend = x2, yend = y2),
+               color = "red", # Internal lines are red
+               linewidth = 0.7) +
+
+  # Add all labels
+  geom_text(data = labels_current, aes(x = x, y = y, label = label, color = color_val, angle = angle_val),
+            size = 3.5) +
+  scale_color_manual(values = c("black" = "black", "red" = "red")) +
+  guides(color = "none") + # Hide label color legend
+
+  # Ensure the court aspect ratio is correct
+  coord_fixed() +
+
+  # Graph labels
+  labs(title = "Squash Court: Back Wall Label Removed",
+       x = "Court Width (meters)",
+       y = "Court Length (meters)") +
+
+  # Minimal theme with no grid lines
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+```
+
+```{r warning=FALSE}
+
+library(ggplot2)
+library(dplyr)
+
+# --- Define Court Dimensions and Key Line Coordinates ---
+court_width <- 6.4
+court_length <- 9.75
+
+court_xmin <- -court_width / 2
+court_xmax <- court_width / 2
+court_ymin <- -court_length / 2 # Y-coordinate of the Back Wall
+court_ymax <- court_length / 2 # Y-coordinate of the Front Wall
+
+y_short_line <- court_ymin + 4.26 # Y-coordinate of the Short Line
+x_center_line <- 0 # X-coordinate for the center of the court
+
+# Coordinates for service box lines (extending FROM Short Line TOWARDS Back Wall)
+y_service_box_back_line <- y_short_line - 1.6 # 1.6m towards the back from the Short Line
+
+# Inner X-coordinates for service boxes (1.6m from respective sidewalls)
+x_service_box_inner_left <- court_xmin + 1.6
+x_service_box_inner_right <- court_xmax - 1.6
+
+# --- Lines Data (cumulative from previous steps) ---
+short_line_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  court_xmin, y_short_line,  court_xmax, y_short_line
+)
+
+vertical_line_short_to_back_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  x_center_line, y_short_line, x_center_line, court_ymin
+)
+
+service_box_lines_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  court_xmin, y_service_box_back_line, x_service_box_inner_left, y_service_box_back_line,
+  x_service_box_inner_right, y_service_box_back_line, court_xmax, y_service_box_back_line,
+  x_service_box_inner_left, y_short_line, x_service_box_inner_left, y_service_box_back_line,
+  x_service_box_inner_right, y_short_line, x_service_box_inner_right, y_service_box_back_line
+)
+
+all_internal_lines_current <- bind_rows(
+  short_line_data,
+  vertical_line_short_to_back_data,
+  service_box_lines_data
+)
+
+# --- Labels Data (Divided by color for direct application in geom_text) ---
+labels_black <- tribble(
+  ~x, ~y, ~label, ~angle_val,
+  x_center_line, court_ymax + 0.8, "Front Wall", 0
+)
+
+labels_red <- tribble(
+  ~x, ~y, ~label, ~angle_val,
+  x_center_line - 0.6, y_short_line + 0.6, "Short Line", 0,
+  court_xmin - 0.8, (y_short_line + y_service_box_back_line) / 2, "Service Box", 90,
+  court_xmax + 0.8, (y_short_line + y_service_box_back_line) / 2, "Service Box", 90
+)
+
+# --- Plotting the court with player positions (now with distinct player colors) ---
+# Ensure 'squash_data_clean' dataframe is loaded in your R environment
+# (Dummy data as provided in previous response, if needed for testing)
+# squash_data_clean <- tibble(
+#   p1.x = runif(10, -3.2, 3.2),
+#   p1.y = runif(10, -4.875, 4.875),
+#   p1.name = "Player 1",
+#   p2.x = runif(10, -3.2, 3.2),
+#   p2.y = runif(10, -4.875, 4.875),
+#   p2.name = "Player 2"
+# )
+
+ggplot() +
+  # Draw the main court rectangle (the base "graph")
+  geom_rect(aes(xmin = court_xmin, xmax = court_xmax, ymin = court_ymin, ymax = court_ymax),
+            fill = "white",
+            color = "black",
+            linewidth = 0.8) +
+
+  # Add all internal lines
+  geom_segment(data = all_internal_lines_current,
+               aes(x = x1, y = y1, xend = x2, yend = y2),
+               color = "red",
+               linewidth = 0.7) +
+
+  # Add static labels (now with direct color assignment)
+  geom_text(data = labels_black, aes(x = x, y = y, label = label, angle = angle_val),
+            color = "black", size = 3.5) +
+  geom_text(data = labels_red, aes(x = x, y = y, label = label, angle = angle_val),
+            color = "red", size = 3.5) +
+
+  # --- Add Player Positions (colors will now be distinct based on p1.name/p2.name) ---
+  geom_point(data = squash_data_clean, aes(x = p1.x, y = p1.y, color = p1.name), alpha = 0.4, size = 3) +
+  geom_point(data = squash_data_clean, aes(x = p2.x, y = p2.y, color = p2.name), alpha = 0.4, size = 3) +
+
+  # Ensure the court's aspect ratio is fixed and correct
+  coord_fixed() +
+
+  # Set x and y limits for the plot area
+  xlim(court_xmin, court_xmax) +
+  ylim(court_ymin, court_ymax) +
+
+  # Graph labels (title from your snippet, axis labels from our court graph)
+  labs(title = "All Player Positions imposed on a Squash Court",
+       x = "Court Width (meters)",
+       y = "Court Length (meters)") +
+
+  # Apply a minimal theme and remove grid lines for a clean look
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+```
+
+Player1 Vs. Player2 positions\
+
+```{r warning=FALSE}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr) # Make sure tidyr is loaded for pivot_longer
+
+# --- Define Court Dimensions and Key Line Coordinates ---
+court_width <- 6.4
+court_length <- 9.75
+
+court_xmin <- -court_width / 2
+court_xmax <- court_width / 2
+court_ymin <- -court_length / 2 # Y-coordinate of the Back Wall
+court_ymax <- court_length / 2 # Y-coordinate of the Front Wall
+
+y_short_line <- court_ymin + 4.26 # Y-coordinate of the Short Line
+x_center_line <- 0 # X-coordinate for the center of the court
+
+# Coordinates for service box lines
+y_service_box_back_line <- y_short_line - 1.6
+x_service_box_inner_left <- court_xmin + 1.6
+x_service_box_inner_right <- court_xmax - 1.6
+
+# --- Lines Data (cumulative from previous steps) ---
+short_line_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  court_xmin, y_short_line,  court_xmax, y_short_line
+)
+
+vertical_line_short_to_back_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  x_center_line, y_short_line, x_center_line, court_ymin
+)
+
+service_box_lines_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  court_xmin, y_service_box_back_line, x_service_box_inner_left, y_service_box_back_line,
+  x_service_box_inner_right, y_service_box_back_line, court_xmax, y_service_box_back_line,
+  x_service_box_inner_left, y_short_line, x_service_box_inner_left, y_service_box_back_line,
+  x_service_box_inner_right, y_short_line, x_service_box_inner_right, y_service_box_back_line
+)
+
+all_internal_lines_current <- bind_rows(
+  short_line_data,
+  vertical_line_short_to_back_data,
+  service_box_lines_data
+)
+
+# --- Labels Data (Divided by color for direct application in geom_text) ---
+labels_black <- tribble(
+  ~x, ~y, ~label, ~angle_val,
+  x_center_line, court_ymax + 0.8, "Front Wall", 0
+)
+
+labels_red <- tribble(
+  ~x, ~y, ~label, ~angle_val,
+  x_center_line - 0.6, y_short_line + 0.6, "Short Line", 0,
+  court_xmin - 0.8, (y_short_line + y_service_box_back_line) / 2, "Service Box", 90,
+  court_xmax + 0.8, (y_short_line + y_service_box_back_line) / 2, "Service Box", 90
+)
+
+# --- Get unique player combinations ---
+# This assumes squash_data_clean is loaded in your R environment
+player_combinations <- squash_data_clean %>%
+  distinct(p1.name, p2.name)
+
+# --- Loop through each player combination and generate a plot ---
+for (i in 1:nrow(player_combinations)) {
+  current_p1_name <- player_combinations$p1.name[i]
+  current_p2_name <- player_combinations$p2.name[i]
+
+  # 1. Filter the original data for the current player pair
+  filtered_match_data <- squash_data_clean %>%
+    filter(p1.name == current_p1_name & p2.name == current_p2_name)
+
+  # 2. Reshape the filtered data to long format for plotting
+  player_positions_long_match <- filtered_match_data %>%
+    select(filename, action, replay, starts_with("p")) %>%
+    pivot_longer(
+      cols = c(p1.x, p1.y, p1.name, p1.color, p2.x, p2.y, p2.name, p2.color),
+      names_to = c("player_id", ".value"),
+      names_pattern = "(p.)\\.(.*)"
+    ) %>%
+    rename(player_name = name, player_color = color)
+
+  # 3. Get the specific player names and their corresponding colors for this match
+  # This ensures the legend uses the exact colors from your data
+  match_player_color_map <- player_positions_long_match %>%
+    distinct(player_name, player_color) %>%
+    pull(player_color, name = player_name)
+
+  # 4. Generate the plot for the current match
+  p <- ggplot() +
+    # Court rectangle
+    geom_rect(aes(xmin = court_xmin, xmax = court_xmax, ymin = court_ymin, ymax = court_ymax),
+              fill = "white", color = "black", linewidth = 0.8) +
+
+    # Internal court lines
+    geom_segment(data = all_internal_lines_current,
+                 aes(x = x1, y = y1, xend = x2, yend = y2),
+                 color = "red", linewidth = 0.7) +
+
+    # Static court labels
+    geom_text(data = labels_black, aes(x = x, y = y, label = label, angle = angle_val),
+              color = "black", size = 3.5) +
+    geom_text(data = labels_red, aes(x = x, y = y, label = label, angle = angle_val),
+              color = "red", size = 3.5) +
+
+    # Player positions for the current match
+    geom_point(data = player_positions_long_match,
+               aes(x = x, y = y, color = player_name),
+               alpha = 0.4, size = 3) +
+
+    # Use the specific colors from the data for the players
+    scale_color_manual(values = match_player_color_map, name = "Player") +
+
+    # Fixed aspect ratio and plot limits
+    coord_fixed() +
+    xlim(court_xmin, court_xmax) +
+    ylim(court_ymin, court_ymax) +
+
+    # Dynamic title for each match
+    labs(title = paste0(current_p1_name, " Vs. ", current_p2_name),
+         x = "Court Width (meters)",
+         y = "Court Length (meters)") +
+
+    # Minimal theme
+    theme_minimal() +
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank())
+
+  # Print the plot to display it
+  print(p)
+}
+```
+
+Plotly Object
+
+```{r warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr) # Make sure tidyr is loaded for pivot_longer
+library(plotly) # Load plotly
+
+# --- Define Court Dimensions and Key Line Coordinates ---
+court_width <- 6.4
+court_length <- 9.75
+
+court_xmin <- -court_width / 2
+court_xmax <- court_width / 2
+court_ymin <- -court_length / 2 # Y-coordinate of the Back Wall
+court_ymax <- court_length / 2 # Y-coordinate of the Front Wall
+
+y_short_line <- court_ymin + 4.26 # Y-coordinate of the Short Line
+x_center_line <- 0 # X-coordinate for the center of the court
+
+# Coordinates for service box lines
+y_service_box_back_line <- y_short_line - 1.6
+x_service_box_inner_left <- court_xmin + 1.6
+x_service_box_inner_right <- court_xmax - 1.6
+
+# --- Lines Data (cumulative from previous steps) ---
+short_line_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  court_xmin, y_short_line,  court_xmax, y_short_line
+)
+
+vertical_line_short_to_back_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  x_center_line, y_short_line, x_center_line, court_ymin
+)
+
+service_box_lines_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  court_xmin, y_service_box_back_line, x_service_box_inner_left, y_service_box_back_line,
+  x_service_box_inner_right, y_service_box_back_line, court_xmax, y_service_box_back_line,
+  x_service_box_inner_left, y_short_line, x_service_box_inner_left, y_service_box_back_line,
+  x_service_box_inner_right, y_short_line, x_service_box_inner_right, y_service_box_back_line
+)
+
+all_internal_lines_current <- bind_rows(
+  short_line_data,
+  vertical_line_short_to_back_data,
+  service_box_lines_data
+)
+
+# --- Labels Data (Divided by color for direct application as annotations) ---
+labels_black <- tribble(
+  ~x, ~y, ~label, ~angle_val,
+  x_center_line, court_ymax + 0.8, "Front Wall", 0
+)
+
+labels_red <- tribble(
+  ~x, ~y, ~label, ~angle_val,
+  x_center_line - 0.6, y_short_line + 0.6, "Short Line", 0,
+  court_xmin - 0.8, (y_short_line + y_service_box_back_line) / 2, "Service Box", 90,
+  court_xmax + 0.8, (y_short_line + y_service_box_back_line) / 2, "Service Box", 90
+)
+
+# --- Prepare data for Plotly ---
+# First, create the 'match_label' for all data
+player_positions_long_all <- squash_data_clean %>%
+  mutate(match_label = paste(p1.name, "Vs.", p2.name)) %>%
+  # Then pivot to long format
+  pivot_longer(
+    cols = c(p1.x, p1.y, p1.name, p1.color, p2.x, p2.y, p2.name, p2.color),
+    names_to = c("player_id", ".value"),
+    names_pattern = "(p.)\\.(.*)"
+  ) %>%
+  rename(player_name = name, player_color = color)
+
+# Get the unique player names and their assigned colors globally
+# This map will be used to assign consistent colors to players across all matches
+all_player_color_map <- player_positions_long_all %>%
+  distinct(player_name, player_color) %>%
+  pull(player_color, name = player_name)
+
+# --- Create the base plotly object (court elements) ---
+p <- plot_ly()
+
+# Add court rectangle
+p <- p %>% add_trace(
+  x = c(court_xmin, court_xmax, court_xmax, court_xmin, court_xmin),
+  y = c(court_ymin, court_ymin, court_ymax, court_ymax, court_ymin),
+  mode = 'lines',
+  fill = 'toself',
+  fillcolor = 'white',
+  line = list(color = 'black', width = 0.8),
+  hoverinfo = 'none',
+  showlegend = FALSE, # Hide from legend
+  name = "Court Outline"
+)
+
+# Add internal lines (loop through tribbles to add each line segment as a trace)
+for (j in 1:nrow(all_internal_lines_current)) {
+  p <- p %>% add_trace(
+    x = c(all_internal_lines_current$x1[j], all_internal_lines_current$x2[j]),
+    y = c(all_internal_lines_current$y1[j], all_internal_lines_current$y2[j]),
+    mode = 'lines',
+    line = list(color = 'red', width = 0.7),
+    hoverinfo = 'none',
+    showlegend = FALSE, # Hide from legend
+    name = paste("Court Line", j)
+  )
+}
+
+# Add court labels as annotations (Plotly's text equivalent for static labels)
+for (j in 1:nrow(labels_black)) {
+  p <- p %>% add_annotations(
+    x = labels_black$x[j], y = labels_black$y[j],
+    text = labels_black$label[j],
+    showarrow = FALSE,
+    font = list(color = "black", size = 12),
+    textangle = labels_black$angle_val[j]
+  )
+}
+for (j in 1:nrow(labels_red)) {
+  p <- p %>% add_annotations(
+    x = labels_red$x[j], y = labels_red$y[j],
+    text = labels_red$label[j],
+    showarrow = FALSE,
+    font = list(color = "red", size = 12),
+    textangle = labels_red$angle_val[j]
+  )
+}
+
+# Add reference lines for exact court boundaries
+p <- p %>% add_trace(x = c(court_xmin, court_xmax), y = c(court_ymin, court_ymin), mode = 'lines', line = list(color = 'blue', dash = 'dash', width = 0.8), hoverinfo = 'none', showlegend = FALSE, name = "Boundary Line") %>%
+           add_trace(x = c(court_xmin, court_xmax), y = c(court_ymax, court_ymax), mode = 'lines', line = list(color = 'blue', dash = 'dash', width = 0.8), hoverinfo = 'none', showlegend = FALSE, name = "Boundary Line") %>%
+           add_trace(x = c(court_xmin, court_xmin), y = c(court_ymin, court_ymax), mode = 'lines', line = list(color = 'blue', dash = 'dash', width = 0.8), hoverinfo = 'none', showlegend = FALSE, name = "Boundary Line") %>%
+           add_trace(x = c(court_xmax, court_xmax), y = c(court_ymin, court_ymax), mode = 'lines', line = list(color = 'blue', dash = 'dash', width = 0.8), hoverinfo = 'none', showlegend = FALSE, name = "Boundary Line")
+
+
+# --- Add Player Positions with Match Toggling ---
+# Get a list of unique match labels
+unique_matches_labels <- player_positions_long_all %>%
+  distinct(match_label) %>%
+  pull(match_label)
+
+# Loop through each unique match and add traces for both players within that match
+for (match_lbl in unique_matches_labels) {
+  # Filter data for the current match
+  current_match_data <- player_positions_long_all %>%
+    filter(match_label == match_lbl)
+
+  # Get the player names in this specific match (e.g., "Rehman", "Hosny")
+  players_in_match <- current_match_data %>% distinct(player_name) %>% pull(player_name)
+  
+  # For each player in the current match, add a scatter trace
+  for (player_nm in players_in_match) {
+    player_data_for_trace <- current_match_data %>% filter(player_name == player_nm)
+    
+    # Get the player's assigned color
+    player_color_val <- all_player_color_map[player_nm]
+
+    # The 'name' property is what appears in the legend.
+    # The 'legendgroup' property ensures that clicking one trace in the legend
+    # will toggle all other traces that share the same legendgroup.
+    # We want ONE legend entry per match, so only the first player's trace will have 'showlegend = TRUE'
+    # and its 'name' will be the match_label. The second player's trace will have 'showlegend = FALSE'.
+
+    # Determine if this trace should show a legend entry
+    if (player_nm == players_in_match[1]) { # This is the first player encountered for this match
+      trace_name_in_legend <- match_lbl # The legend will show the match name
+      show_legend_entry <- TRUE
+    } else { # This is the second player for the same match
+      trace_name_in_legend <- player_nm # Name for hover/internal identification
+      show_legend_entry <- FALSE # Do NOT show this in the main legend
+    }
+
+    p <- p %>% add_trace(
+      data = player_data_for_trace,
+      x = ~x, y = ~y,
+      type = 'scatter',
+      mode = 'markers',
+      marker = list(color = player_color_val, size = 8, opacity = 0.4),
+      name = trace_name_in_legend,      # Name for legend or hover
+      legendgroup = match_lbl,          # Group traces by match_label for toggling
+      showlegend = show_legend_entry,   # Show legend entry only for the first player of the match
+      hovertemplate = paste("<b>Match:</b>", match_lbl,
+                            "<br><b>Player:</b>", player_nm,
+                            "<br>X: %{x:.2f}<br>Y: %{y:.2f}<extra></extra>") # Custom hover info
+    )
+  }
+}
+
+# --- Plotly Layout adjustments ---
+p <- p %>% layout(
+  title = "Player Positions on Squash Court (Interactive by Match)",
+  xaxis = list(
+    range = c(court_xmin, court_xmax),
+    zeroline = FALSE,
+    title = "Court Width (meters)",
+    fixedrange = TRUE # Prevent zooming on X-axis if not desired
+  ),
+  yaxis = list(
+    range = c(court_ymin, court_ymax),
+    zeroline = FALSE,
+    title = "Court Length (meters)",
+    scaleanchor = "x", # Ensures aspect ratio is maintained by linking Y to X
+    scaleratio = 1, # Maintains 1:1 ratio with X if scaled, combined with aspectratio below
+    fixedrange = TRUE # Prevent zooming on Y-axis
+  ),
+  # Set aspect ratio to match the court dimensions. This works better than `coord_fixed()` for plotly.
+  scene = list(
+    aspectmode = "manual",
+    aspectratio = list(x = court_width, y = court_length, z = 1)
+  ),
+  hovermode = "closest", # Show nearest point's hover information
+  legend = list(
+    # Set legenditemclick to 'toggleothers' if you want only one group visible at a time.
+    # Otherwise, default behavior allows multiple groups to be visible.
+    # itemclick = "toggleothers",
+    tracegroupgap = 10 # Optional: add some gap between legend groups
+  )
+)
+
+# Print the plotly object
+p
+
+```
+
+T-box Dominance
+
+```{r warning=FALSE}
+# install.packages("ggforce") # Uncomment and run if you don't have it
+library(ggplot2)
+library(dplyr)
+library(tidyr) # Make sure tidyr is loaded for pivot_longer
+library(ggforce) # For geom_circle
+
+# --- Define Court Dimensions and Key Line Coordinates ---
+court_width <- 6.4
+court_length <- 9.75
+
+court_xmin <- -court_width / 2
+court_xmax <- court_width / 2
+court_ymin <- -court_length / 2 # Y-coordinate of the Back Wall
+court_ymax <- court_length / 2 # Y-coordinate of the Front Wall
+
+y_short_line <- court_ymin + 4.26 # Y-coordinate of the Short Line
+x_center_line <- 0 # X-coordinate for the center of the court
+
+# Coordinates for service box lines
+y_service_box_back_line <- y_short_line - 1.6
+x_service_box_inner_left <- court_xmin + 1.6
+x_service_box_inner_right <- court_xmax - 1.6
+
+# --- T-zone Definition ---
+t_zone_center_x <- x_center_line
+t_zone_center_y <- y_short_line
+# Define T-zone radius: You can adjust this value as needed
+t_zone_radius <- 1.5 # meters
+
+# --- Lines Data (cumulative from previous steps) ---
+short_line_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  court_xmin, y_short_line, court_xmax, y_short_line
+)
+
+vertical_line_short_to_back_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  x_center_line, y_short_line, x_center_line, court_ymin
+)
+
+service_box_lines_data <- tribble(
+  ~x1, ~y1, ~x2, ~y2,
+  court_xmin, y_service_box_back_line, x_service_box_inner_left, y_service_box_back_line,
+  x_service_box_inner_right, y_service_box_back_line, court_xmax, y_service_box_back_line,
+  x_service_box_inner_left, y_short_line, x_service_box_inner_left, y_service_box_back_line,
+  x_service_box_inner_right, y_short_line, x_service_box_inner_right, y_service_box_back_line
+)
+
+all_internal_lines_current <- bind_rows(
+  short_line_data,
+  vertical_line_short_to_back_data,
+  service_box_lines_data
+)
+
+# --- Labels Data (Divided by color for direct application in geom_text) ---
+labels_black <- tribble(
+  ~x, ~y, ~label, ~angle_val,
+  x_center_line, court_ymax + 0.8, "Front Wall", 0
+)
+
+labels_red <- tribble(
+  ~x, ~y, ~label, ~angle_val,
+  x_center_line - 0.6, y_short_line + 0.6, "Short Line", 0,
+  court_xmin - 0.8, (y_short_line + y_service_box_back_line) / 2, "Service Box", 90,
+  court_xmax + 0.8, (y_short_line + y_service_box_back_line) / 2, "Service Box", 90
+)
+
+# --- Get unique player combinations ---
+# For demonstration, I'll create dummy data if squash_data_clean isn't available
+if (!exists("squash_data_clean")) {
+  message("`squash_data_clean` not found. Creating dummy data for demonstration.")
+  squash_data_clean <- tibble(
+    filename = rep(c("match1", "match2", "match3"), each = 50), # Added a third match
+    action = rep(1:50, 3),
+    replay = rep(1:50, 3),
+    p1.x = c(runif(50, -2, 2), runif(50, -1, 1), runif(50, -1.5, 1.5)),
+    p1.y = c(runif(50, -3, 3), runif(50, y_short_line - 0.5, y_short_line + 0.5), runif(50, y_short_line - 0.2, y_short_line + 0.2)), # p1 spends more time in T-zone in match2 and match3
+    p1.name = c(rep("Player A", 50), rep("Player C", 50), rep("Player E", 50)),
+    p1.color = c(rep("blue", 50), rep("darkgreen", 50), rep("orange", 50)),
+    p2.x = c(runif(50, -2, 2), runif(50, -1, 1), runif(50, -1, 1)),
+    p2.y = c(runif(50, -3, 3), runif(50, -2, 2), runif(50, -2.5, 2.5)),
+    p2.name = c(rep("Player B", 50), rep("Player D", 50), rep("Player F", 50)),
+    p2.color = c(rep("red", 50), rep("purple", 50), rep("brown", 50))
+  )
+}
+
+player_combinations <- squash_data_clean %>%
+  distinct(p1.name, p2.name)
+
+# --- Initialize a list to store T-zone dominance tables for each match ---
+all_t_zone_summaries <- list()
+
+# --- Loop through each player combination and generate a plot + dominance table ---
+for (i in 1:nrow(player_combinations)) {
+  current_p1_name <- player_combinations$p1.name[i]
+  current_p2_name <- player_combinations$p2.name[i]
+
+  # 1. Filter the original data for the current player pair
+  filtered_match_data <- squash_data_clean %>%
+    filter(p1.name == current_p1_name & p2.name == current_p2_name)
+
+  # 2. Reshape the filtered data to long format for plotting and T-zone calculation
+  player_positions_long_match <- filtered_match_data %>%
+    select(filename, action, replay, starts_with("p")) %>%
+    pivot_longer(
+      cols = c(p1.x, p1.y, p1.name, p1.color, p2.x, p2.y, p2.name, p2.color),
+      names_to = c("player_id", ".value"),
+      names_pattern = "(p.)\\.(.*)"
+    ) %>%
+    rename(player_name = name, player_color = color) %>%
+    # Calculate distance from T-zone center and check if inside T-zone
+    mutate(
+      distance_to_t_zone = sqrt((x - t_zone_center_x)^2 + (y - t_zone_center_y)^2),
+      in_t_zone = distance_to_t_zone <= t_zone_radius
+    )
+
+  # 3. Get the specific player names and their corresponding colors for this match
+  match_player_color_map <- player_positions_long_match %>%
+    distinct(player_name, player_color) %>%
+    pull(player_color, name = player_name)
+
+  # 4. Generate the plot for the current match
+  p <- ggplot() +
+    # Court rectangle
+    geom_rect(aes(xmin = court_xmin, xmax = court_xmax, ymin = court_ymin, ymax = court_ymax),
+              fill = "white", color = "black", linewidth = 0.8) +
+
+    # Internal court lines
+    geom_segment(data = all_internal_lines_current,
+                 aes(x = x1, y = y1, xend = x2, yend = y2),
+                 color = "red", linewidth = 0.7) +
+
+    # T-zone circle
+    geom_circle(aes(x0 = t_zone_center_x, y0 = t_zone_center_y, r = t_zone_radius),
+                color = "blue", linetype = "dashed", linewidth = 0.8, alpha = 0.7) +
+    geom_text(aes(x = t_zone_center_x, y = t_zone_center_y + t_zone_radius + 0.3), label = "T-Zone", color = "blue", size = 3.5) +
+
+
+    # Static court labels
+    geom_text(data = labels_black, aes(x = x, y = y, label = label, angle = angle_val),
+              color = "black", size = 3.5) +
+    geom_text(data = labels_red, aes(x = x, y = y, label = label, angle = angle_val),
+              color = "red", size = 3.5) +
+
+    # Player positions for the current match
+    geom_point(data = player_positions_long_match,
+               aes(x = x, y = y, color = player_name),
+               alpha = 0.4, size = 3) +
+
+    # Use the specific colors from the data for the players
+    scale_color_manual(values = match_player_color_map, name = "Player") +
+
+    # Fixed aspect ratio and plot limits
+    coord_fixed() +
+    xlim(court_xmin, court_xmax) +
+    ylim(court_ymin, court_ymax) +
+
+    # Dynamic title for each match
+    labs(title = paste0(current_p1_name, " Vs. ", current_p2_name, " - Player Positions & T-Zone"),
+         x = "Court Width (meters)",
+         y = "Court Length (meters)") +
+
+    # Minimal theme
+    theme_minimal() +
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank())
+
+  # Print the plot to display it
+  print(p)
+
+  # 5. Calculate T-zone dominance for the current match
+  t_zone_summary <- player_positions_long_match %>%
+    group_by(player_name) %>%
+    summarise(
+      Match_Players = paste0(current_p1_name, " Vs. ", current_p2_name), # Add match identifier
+      Total_Frames = n(),
+      Frames_in_T_Zone = sum(in_t_zone),
+      # Calculate and format percentage here
+      Percentage_in_T_Zone = paste0(round((sum(in_t_zone) / n()) * 100, 2), "%")
+    ) %>%
+    # Select and reorder columns for clarity in the final table
+    select(Match_Players, player_name, Total_Frames, Frames_in_T_Zone, Percentage_in_T_Zone) %>%
+    # Arrange by match and then by percentage to easily see dominance per match
+    arrange(Match_Players, desc(Percentage_in_T_Zone))
+
+  # Store the summary table for this match in the list
+  all_t_zone_summaries[[i]] <- t_zone_summary
+}
+
+
+### T-Zone Dominance Across All Matches
+
+# Combine all individual T-zone summaries into a single table
+final_t_zone_dominance_table <- bind_rows(all_t_zone_summaries)
+
+# Print the final combined table
+print(final_t_zone_dominance_table)
+```
